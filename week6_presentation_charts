@@ -1,0 +1,202 @@
+
+
+library(data.table)
+library(ggplot2)
+
+
+# Initial data prep
+
+start <- read.csv("2011-2016.CleansedData.csv")
+
+start_DT <- as.data.table(start)
+
+abrid <- start_DT[data_set %in% c("2015-2016 Regular Season","2016 Playoff")]
+                  
+summary(abrid)
+
+abrid <- abrid[period<=4]
+
+timeouts_DT <- abrid[timeout.1==1 & type != "start of period"]
+
+
+# Create aggregated datasets
+
+game_DT <- timeouts_DT[, .(num_tos_hteam = max(timeout.hteam),
+                           num_tos_ateam = max(timeout.ateam),
+                           num_tos_total = max(timeout.count)),
+                       by = .(game_id)]
+
+game_DT$num_tos_hplusa <- game_DT$num_tos_hteam + game_DT$num_tos_ateam
+
+      game_DT <-melt(game_DT, id.vars = c("game_id"),
+                     measure.vars = c("num_tos_hteam", "num_tos_ateam", "num_tos_total","num_tos_hplusa"))
+
+
+game_period_DT <- abrid[, .(num_tos_hteam = max(timeout.hteam),
+                            num_tos_ateam = max(timeout.ateam)),
+                                 by = .(game_id,period,data_set)]
+
+game_period_DT$num_tos_hplusa <- game_period_DT$num_tos_hteam + game_period_DT$num_tos_ateam
+
+  game_period_DT <-melt(game_period_DT, id.vars = c("game_id","period","data_set"),
+                 measure.vars = c("num_tos_hteam", "num_tos_ateam","num_tos_hplusa"))
+  
+
+game_team_DT <- timeouts_DT[, .(num_tos = .N),
+                      by = .(game_id,data_set,timeout.team)]
+
+  
+  
+  
+### ANALYSIS
+  
+summary(game_DT)
+summary(game_period_DT)
+
+#Boxplots
+
+    ggplot(game_DT[variable!="num_tos_total"],
+           aes(x= variable, y= value)) +
+      geom_boxplot(color = "gray40", fill = "lightblue1") +
+      xlab("") +
+      ylab("Count") +
+      ggtitle("Distribution of Number of Time Outs per Game") +
+      theme_bw() +
+      scale_y_continuous(limits=c(0,max(game_DT$value)),breaks=seq(0,max(game_DT$value),1)) +
+      scale_x_discrete(labels=c("Home Team", "Away Team", "Home & Away Combined"))
+
+    
+    # by home team and period
+    ggplot(game_period_DT[variable!="num_tos_hplusa"],
+           aes(x= as.character(period), y = value)) +
+      geom_boxplot(color = "gray40", fill = "lightblue1") +
+      xlab("Period (Home & Away Teams)") +
+      ylab("Count") +
+      facet_wrap(~variable) +
+      ggtitle("Distribution of Number of Time Outs Taken per Period") +
+      theme_bw() +
+      scale_y_continuous(limits=c(0,9),breaks=seq(0,9,1))
+    
+    ggplot(game_team_DT[timeout.team!="" & data_set=="2015-2016 Regular Season"],
+           aes(x= timeout.team, y= num_tos)) +
+      geom_boxplot(color = "gray40", fill = "lightblue1") +
+      ylab("Count") +
+      xlab("") +
+      ggtitle("Distribution of Number of Time Outs per Game (Regular Season) by Team") +
+      theme_bw() +
+      theme(axis.text.x = element_text(size=8, angle=90)) +
+      scale_y_continuous(limits=c(2,8),breaks=seq(2,8,1))
+    
+    ggplot(game_team_DT[timeout.team!="" & data_set=="2016 Playoff"],
+           aes(x= timeout.team, y= num_tos)) +
+      geom_boxplot(color = "gray40", fill = "lightblue1") +
+      ylab("Count") +
+      xlab("") +
+      ggtitle("Distribution of Number of Time Outs per Game (Playoffs) by Team") +
+      theme_bw() +
+      theme(axis.text.x = element_text(size=8, angle=90)) +
+      scale_y_continuous(limits=c(2,8),breaks=seq(2,8,1))
+    
+    
+        # by team - playoffs
+    ggplot(game_team_DT[timeout.team!="" & data_set=="2016 Playoff"],
+           aes(x= timeout.team, y= num_tos)) +
+      geom_boxplot(color = "gray40", fill = "lightblue1") 
+    
+
+# Histograms
+      
+      ggplot(timeouts_DT, aes(x = remaining.minutes, fill=type)) +
+        geom_histogram(binwidth = 1,alpha=.8) +
+        ylab("Count") +
+        theme_bw() +
+        ggtitle("Timeouts by Minutes Left in Period \n NBA Categorization")
+      
+      ggplot(timeouts_DT, aes(x = remaining.minutes, fill=timeout.type)) +
+        geom_histogram(binwidth = 1,alpha=.8) +
+        ylab("Count") +
+        theme_bw() +
+        ggtitle("Time Outs by Minutes Left in Period \n Our Categorization")
+      
+      ggplot(timeouts_DT[!(timeout.type %in% c("1","official"))], aes(x = remaining.minutes, fill=timeout.type)) +
+        geom_histogram(binwidth = 1,alpha=.8) +
+        ylab("Count") +
+        theme_bw() +
+        ggtitle("Time Outs by Minutes Left in Period \n Excluding Official and Unclassified")
+      
+      ggplot(timeouts_DT[!(timeout.type %in% c("1","official"))], aes(x = remaining.minutes, fill=timeout.type)) +
+        geom_histogram(binwidth = 1,alpha=.8) +
+        ylab("Count") +
+        theme_bw() +
+        facet_wrap(~period,scales="free_y") + 
+        theme(legend.position = "bottom") +
+        ggtitle("Time Outs by Minutes Left in Period \nBy Period, Excluding Official and Unclassified")
+      
+      #no endgame
+      ggplot(timeouts_DT[!(timeout.type %in% c("1","official","endgame"))], aes(x = remaining.minutes, fill=timeout.type)) +
+        geom_histogram(binwidth = 1,alpha=.8) +
+        ylab("Count") +
+        theme_bw() +
+        facet_wrap(~period,scales="free_y") + 
+        theme(legend.position = "bottom") +
+        ggtitle("Time Outs by Minutes Left in Period \nBy Period, Excluding Official and Unclassified and Period End")
+
+
+
+  
+  
+
+  ggplot(timeouts_DT[deadball.time.elapsed!=0], aes(x = deadball.time.elapsed, fill=timeout.type)) +
+    geom_histogram(binwidth = 1,alpha=.8) +
+    ylab("Count") +
+    xlab("Seconds") +
+    theme_bw() +
+    theme(legend.position = "bottom") +
+    ggtitle("Timeouts by Seconds Left since Last Deadball \nOur Categorization, Excluding Seconds=0")
+  
+
+  
+  ggplot(timeouts_DT[deadball.time.elapsed!=0], aes(x = deadball.time.elapsed, fill=timeout.type)) +
+    geom_histogram(binwidth = 1,alpha=.8) +
+    theme_bw() +
+    xlab("Seconds")+
+    ylab("Count") +
+    theme(legend.position = "bottom") +
+  ggtitle("Number of Timeouts by Seconds Since Last Deadball \nExcludes Seconds=0")
+  
+  
+  ggplot(timeouts_DT[deadball.time.elapsed!=0 & !(timeout.type %in% c("official","1"))], aes(x = deadball.time.elapsed, fill=timeout.type)) +
+    geom_histogram(binwidth = 1,alpha=.8) +
+    theme_bw() +
+    xlab("Seconds")+
+    ylab("Count") +
+    theme(legend.position = "bottom") +
+    ggtitle("Number of Timeouts by Seconds Since Last Deadball \nExcludes Unclassified, Official, and Seconds=0")
+  
+
+  nrow(timeouts_DT)
+  nrow(timeouts_DT[deadball.time.elapsed==0])
+  nrow(timeouts_DT[deadball.time.elapsed==0])/nrow(timeouts_DT)
+  
+  
+  [hteam.run!=0 & !(timeout.type %in% c("1","official"))]
+  
+  ggplot(timeouts_DT, aes(x = hteam.pts.since.deadball, fill=timeout.type)) +
+    geom_histogram(binwidth = 1,alpha=.8) +
+    ylab("Count") +
+    theme_bw() +
+    xlab("Home Team Points Since Last Deadball")+
+    theme(legend.position = "bottom") +
+    scale_x_continuous(breaks=seq(0,20,1)) +
+    ggtitle("Number of Timeouts - Home Team Points Since Last Deadball")
+  
+  ggplot(timeouts_DT[hteam.pts.since.deadball!= 0 & !(timeout.type %in% c("1","official"))], aes(x = hteam.pts.since.deadball, fill=timeout.type)) +
+    geom_histogram(binwidth = 1,alpha=.8) +
+    ylab("Count") +
+    theme_bw() +
+    xlab("Home Team Points Since Last Deadball")+
+    theme(legend.position = "bottom") +
+    scale_x_continuous(breaks=seq(0,20,1)) +
+    ggtitle("Number of Timeouts - Home Team Points Since Last Deadball \nExcludes Unclassified, Official, and Points = 0")
+  
+  
